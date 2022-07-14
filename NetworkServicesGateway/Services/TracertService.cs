@@ -1,21 +1,23 @@
 ﻿using NetworkServicesGateway.Models;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Text;
+
 namespace NetworkServicesGateway.Services
 {
-    public class PingService : IDisposable, INetworkService
+    public class TracertService : IDisposable, INetworkService
     {
         private readonly Ping ping;
         private readonly Func<NetworkActionResult, Task> sendUpdate;
         private CancellationTokenSource cancellationTokenSource;
-        private TimeSpan sendPingInterval;
-        private bool working = false;
 
-        public PingService(Func<NetworkActionResult, Task> sendUpdate)
+        private bool working = false;
+        private byte[] testData = Encoding.ASCII.GetBytes("asdasdasdasdasdasd");
+
+        public TracertService(Func<NetworkActionResult, Task> sendUpdate)
         {
             ping = new Ping();
             cancellationTokenSource = new();
-            sendPingInterval = TimeSpan.FromMilliseconds(50);
             this.sendUpdate = sendUpdate;
         }
 
@@ -28,6 +30,8 @@ namespace NetworkServicesGateway.Services
             working = true;
             sendUpdate?.Invoke(NetworkActionResult.StartedResult);
             SendPing(ipAddress, cancellationTokenSource.Token);
+            working = false;
+            sendUpdate?.Invoke(NetworkActionResult.StoppedResult);
         }
 
         public void StopService()
@@ -47,24 +51,26 @@ namespace NetworkServicesGateway.Services
             ping.Dispose();
         }
 
-        private void SendPing(IPAddress addressIP, CancellationToken cancellationToken)
+        private void SendPing(IPAddress addressIP, CancellationToken cancellationToken, int ttl = 1)
         {
             try
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    working = false;
                     sendUpdate?.Invoke(NetworkActionResult.StoppedResult);
+                    working = false;
                     return;
                 }
 
-                var reply = ping.Send(addressIP);
+                var pingOpts = new PingOptions(ttl, true);
+                var reply = ping.Send(addressIP, 1000, testData, pingOpts);
 
-                sendUpdate?.Invoke(ParseResult(reply));
+                sendUpdate?.Invoke(ParseResult(ttl, reply));
 
-                Task.Delay(sendPingInterval, cancellationToken)
-                        .GetAwaiter()
-                        .OnCompleted(() => SendPing(addressIP, cancellationToken));
+                if (reply.Status == IPStatus.TtlExpired)
+                {
+                    SendPing(addressIP, cancellationToken, ++ttl);
+                }
             }
             catch
             {
@@ -73,14 +79,11 @@ namespace NetworkServicesGateway.Services
             }
         }
 
-        private NetworkActionResult ParseResult(PingReply reply)
+        private NetworkActionResult ParseResult(int ttl, PingReply reply)
         {
+            var printStatus = reply.Status != IPStatus.TtlExpired;
             var result = NetworkActionResult.RunningResult;
-            result.Message = reply.Status switch
-            {
-                IPStatus.Success => $"Reply from {reply.Address}: {reply.Status} bytes={reply.Buffer.Length} time={reply.RoundtripTime}ms TTL={reply.Options?.Ttl}",
-                _ => reply.Status.ToString()
-            };
+            result.Message = printStatus ? $"{ttl} - {reply.Address} - {reply.Status}" : $"{ttl} - {reply.Address}";
             return result;
         }
     }
