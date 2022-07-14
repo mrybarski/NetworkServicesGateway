@@ -1,0 +1,31 @@
+﻿@using NetworkServicesGateway.Services
+@{
+    var types = Enum.GetValues<NetworkServiceType>();
+}
+
+<div class="network-monitor-main">
+    <label for="input-address-ip">Adres IP</label>
+    <input type="text" id="input-address-ip" />
+
+    @foreach(var t in types)
+    {
+        @if(t == NetworkServiceType.Ping)
+        {
+            <input type="radio" name="serviceType" checked id="@t.ToString()" value="@((int)t)">
+             <label for="@t.ToString()">@t.ToString()</label>
+        }
+        else
+        {
+            <input type="radio" name="serviceType" id="@t.ToString()" value="@((int)t)">
+            <label for="@t.ToString()">@t.ToString()</label>
+        }
+    }
+
+    <button id="button-start">Start</button>
+    <button id="button-stop" style="display: none;">Stop</button>
+    <button id="button-clear">Wyczyść</button>
+
+    <div id="messages-wrapper">
+    </div>
+
+</div>

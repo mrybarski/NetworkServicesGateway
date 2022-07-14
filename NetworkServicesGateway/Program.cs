@@ -1,3 +1,5 @@
+using NetworkServicesGateway.Data;
+using NetworkServicesGateway.Hubs;
 using NetworkServicesGateway.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -5,6 +7,12 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddSingleton<NetworkServicesContext>();
 builder.Services.AddControllersWithViews();
+builder.Services.AddSession(options =>
+{
+    options.Cookie.Name = ".NetworkServicesGateway.Session";
+    options.IdleTimeout = TimeSpan.FromMinutes(10);
+    options.Cookie.IsEssential = true;
+});
 builder.Services.AddSignalR();
 
 var app = builder.Build();
@@ -20,8 +28,12 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+app.UseSession();
+
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllerRoute("default", "{controller=Gateway}/{action=Index}/{id?}");
+    endpoints.MapHub<NetworkUpdatesMonitorHub>("/network-hub");
+});
 
 app.Run();
